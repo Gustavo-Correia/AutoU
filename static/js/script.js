@@ -66,12 +66,21 @@ document.addEventListener('DOMContentLoaded', function() {
             hideResults();
             hideError();
 
+            console.log('Enviando requisição para /classify...');
+            
             const response = await fetch('/classify', {
                 method: 'POST',
                 body: formData
             });
 
+            console.log('Status da resposta:', response.status);
+            
+            if (!response.ok) {
+                throw new Error(`Erro HTTP: ${response.status} - ${response.statusText}`);
+            }
+
             const data = await response.json();
+            console.log('Dados recebidos:', data);
 
             if (data.success) {
                 displayResults(data);
@@ -79,12 +88,28 @@ document.addEventListener('DOMContentLoaded', function() {
                 showError(data.error || 'Erro desconhecido no processamento.');
             }
         } catch (error) {
-            showError('Erro de conexão. Verifique sua internet e tente novamente.');
-            console.error('Error:', error);
+            console.error('Erro detalhado:', error);
+            showError(`Erro de conexão: ${error.message}. Verifique o console para mais detalhes.`);
         } finally {
             setLoading(false);
         }
     }
+
+    
+    async function testConnection() {
+        try {
+            const response = await fetch('/health');
+            const data = await response.json();
+            console.log('Teste de conexão:', data);
+        } catch (error) {
+            console.error('Teste de conexão falhou:', error);
+        }
+    }
+
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        testConnection();
+    });
 
     function displayResults(data) {
         // Atualizar classificação
@@ -143,7 +168,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const responseText = responseContent.textContent;
         navigator.clipboard.writeText(responseText).then(function() {
             const originalText = copyBtn.textContent;
-            copyBtn.textContent = '✓ Copiado!';
+            copyBtn.textContent = 'Copiado!';
             copyBtn.style.background = '#48bb78';
             
             setTimeout(function() {

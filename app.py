@@ -21,7 +21,7 @@ def arquivo_permitido(nome_arquivo):
 def index():
     return render_template('index.html')
 
-@app.route('/classificar', methods=['POST'])
+@app.route('/classify', methods=['POST', 'GET']) 
 def classificar():
     try:
         conteudo_email = ""
@@ -67,6 +67,10 @@ def classificar():
         
     except Exception as e:
         return jsonify({'erro': f'Erro no processamento: {str(e)}'}), 500
-
+# Rota de health check
+@app.route('/health')
+def health():
+    return jsonify({'status': 'healthy', 'message': 'Servidor funcionando'})
+    
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
