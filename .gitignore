@@ -49,7 +49,6 @@ logs/
 # Arquivos de upload
 uploads/
 *.pdf
-*.txt
 
 # Arquivos de configuração sensíveis
 .env
