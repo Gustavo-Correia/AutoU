@@ -1,76 +1,79 @@
-from flask import Flask, render_template, request, jsonify
 import os
+import sys
+from flask import Flask, render_template, request, jsonify
 from werkzeug.utils import secure_filename
+
+# Garantir import absoluto do diretório utils
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(BASE_DIR)
+
 from utils.processador_email import processar_conteudo_email
 from utils.classificador_ia import classificar_email, gerar_resposta
 
 app = Flask(__name__)
-app.config['PASTA_UPLOAD'] = 'uploads'
-app.config['TAMANHO_MAXIMO_CONTEUDO'] = 16 * 1024 * 1024  # 16MB tamanho máximo do arquivo
 
-# Criar diretório de uploads se não existir
-os.makedirs(app.config['PASTA_UPLOAD'], exist_ok=True)
+# Limite de upload padrão do Flask
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB [adequado para txt/pdf]
+app.config['UPLOAD_FOLDER'] = os.path.join(BASE_DIR, 'uploads')
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-EXTENSOES_PERMITIDAS = {'txt', 'pdf'}
+ALLOWED_EXTENSIONS = {'txt', 'pdf'}
 
-def arquivo_permitido(nome_arquivo):
-    return '.' in nome_arquivo and \
-           nome_arquivo.rsplit('.', 1)[1].lower() in EXTENSOES_PERMITIDAS
+def arquivo_permitido(filename: str) -> bool:
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
-@app.route('/classify', methods=['POST', 'GET']) 
-def classificar():
+@app.route('/classify', methods=['POST'])
+def classify():
     try:
         conteudo_email = ""
-        
-        # Verificar se é upload de arquivo
-        if 'arquivo' in request.files:
-            arquivo = request.files['arquivo']
-            if arquivo and arquivo.filename != '' and arquivo_permitido(arquivo.filename):
-                nome_arquivo = secure_filename(arquivo.filename)
-                caminho_arquivo = os.path.join(app.config['PASTA_UPLOAD'], nome_arquivo)
-                arquivo.save(caminho_arquivo)
-                
-                # Processar arquivo
-                conteudo_email = processar_conteudo_email(caminho_arquivo)
-                
-                # Remover arquivo após processamento
-                os.remove(caminho_arquivo)
-            else:
-                return jsonify({'erro': 'Arquivo inválido. Use .txt ou .pdf'}), 400
-        
-        # Verificar se é texto direto
-        elif 'texto' in request.form and request.form['texto'].strip():
-            conteudo_email = request.form['texto'].strip()
-        
-        else:
-            return jsonify({'erro': 'Nenhum conteúdo de email fornecido'}), 400
-        
+
+        # 1) Arquivo (campo 'file')
+        if 'file' in request.files:
+            arquivo = request.files['file']
+            if arquivo and arquivo.filename:
+                if not arquivo_permitido(arquivo.filename):
+                    return jsonify({'error': 'Arquivo inválido. Use .txt ou .pdf'}), 400
+                nome_seguro = secure_filename(arquivo.filename)
+                caminho = os.path.join(app.config['UPLOAD_FOLDER'], nome_seguro)
+                arquivo.save(caminho)
+                try:
+                    conteudo_email = processar_conteudo_email(caminho)
+                finally:
+                    try:
+                        os.remove(caminho)
+                    except Exception:
+                        pass
+
+        # 2) Texto direto (campo 'text')
+        if not conteudo_email and 'text' in request.form:
+            texto = request.form.get('text', '').strip()
+            if texto:
+                conteudo_email = texto
+
         if not conteudo_email:
-            return jsonify({'erro': 'Não foi possível extrair conteúdo do email'}), 400
-        
-        # Classificar email
+            return jsonify({'error': 'Não foi possível extrair conteúdo do email'}), 400
+
+        # Classificação + resposta
         resultado_classificacao = classificar_email(conteudo_email)
-        
-        # Gerar resposta automática
-        sugestao_resposta = gerar_resposta(conteudo_email, resultado_classificacao)
-        
+        resposta_auto = gerar_resposta(conteudo_email, resultado_classificacao)
+
         return jsonify({
-            'sucesso': True,
-            'classificacao': resultado_classificacao,
-            'resposta': sugestao_resposta,
-            'preview_conteudo': conteudo_email[:200] + '...' if len(conteudo_email) > 200 else conteudo_email
+            'success': True,
+            'classification': resultado_classificacao,
+            'response': resposta_auto,
+            'content_preview': (conteudo_email[:200] + '...') if len(conteudo_email) > 200 else conteudo_email
         })
-        
+
     except Exception as e:
-        return jsonify({'erro': f'Erro no processamento: {str(e)}'}), 500
-# Rota de health check
-@app.route('/health')
-def health():
-    return jsonify({'status': 'healthy', 'message': 'Servidor funcionando'})
-    
+        import traceback
+        print("Erro no servidor:", e)
+        print(traceback.format_exc())
+        return jsonify({'error': f'Erro no processamento: {str(e)}'}), 500
+
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
