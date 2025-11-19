@@ -29,5 +29,5 @@ Uma aplicação web que utiliza inteligência artificial para classificar emails
 
 1. **Clone o repositório**
    ```bash
-   git clone https://github.com/seu-usuario/email-classifier.git
-   cd email-classifier
+   git clone https://github.com/Gustavo-Correia/AutoU.git
+   cd AutoU
